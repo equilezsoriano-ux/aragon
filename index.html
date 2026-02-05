@@ -406,7 +406,18 @@
         <!-- Priority (después de demographics) -->
         <div id="priorityCard" class="card" style="margin-bottom:16px; display:none;">
           <h2 style="margin:0 0 12px; font-size:18px;">Elige tu prioridad principal (pesará x2)</h2>
-          <div id="priorityButtons" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+
+          <!-- OPCIONES (incluidas en HTML, no dependen de JS para mostrarse) -->
+          <div id="priorityButtons" style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button type="button" class="btn-outline" data-topic="vivienda">vivienda</button>
+            <button type="button" class="btn-outline" data-topic="transportes">transportes</button>
+            <button type="button" class="btn-outline" data-topic="sanidad">sanidad</button>
+            <button type="button" class="btn-outline" data-topic="economia">economia</button>
+            <button type="button" class="btn-outline" data-topic="educacion">educacion</button>
+            <button type="button" class="btn-outline" data-topic="sociales">sociales</button>
+            <button type="button" class="btn-outline" data-topic="otro">otro</button>
+          </div>
+
           <p style="font-size:12px; color:var(--muted); margin-top:10px;">Puedes dejarlo sin seleccionar.</p>
 
           <div style="display:flex; gap:10px; margin-top:18px;">
@@ -470,11 +481,9 @@
     </main>
 
     <script>
-      // ==========================
-      //  JSON externo (obligatorio)
-      //  Coloca el archivo en la misma carpeta que este HTML (o ajusta la ruta).
-      // ==========================
-      const JSON_URL = "./aragon_2026_votecompass_statements_UPDATED_LINKS.json";
+      // ========= JSON FILE (fetch) =========
+      // Coloca el archivo en la misma carpeta que este HTML o ajusta la ruta.
+      const JSON_URL = "aragon_2026_votecompass_statements_UPDATED_LINKS.json";
 
       // ============ CONFIG ============
       const SCALE = [
@@ -568,7 +577,7 @@
         answers: {},
         priority: null,
         results: [],
-        data: null,          // <-- se cargará desde JSON
+        data: null,            // se rellena tras cargar JSON
         shareImgUrl: null,
         demographics: {
           gender: "",
@@ -594,10 +603,7 @@
         backToDemoBtn: document.getElementById("backToDemoBtn"),
         toQuizBtn: document.getElementById("toQuizBtn"),
 
-        // priority
-        priorityButtons: document.getElementById("priorityButtons"),
-
-        // demographics (NUEVO)
+        // demographics
         demoGender: document.getElementById("demoGender"),
         demoProvince: document.getElementById("demoProvince"),
         demoEmployment: document.getElementById("demoEmployment"),
@@ -622,8 +628,8 @@
 
       function partyStyle(p) {
         return {
-          short: p?.meta?.short || partyStyleFallback[p.party]?.short || p.party.slice(0, 3).toUpperCase(),
-          color: p?.meta?.color || partyStyleFallback[p.party]?.color || "#0f172a"
+          short: p?.meta?.short || partyStyleFallback[p?.party]?.short || (p?.party || "???").slice(0, 3).toUpperCase(),
+          color: p?.meta?.color || partyStyleFallback[p?.party]?.color || "#0f172a"
         };
       }
 
@@ -639,32 +645,6 @@
         if (stage === "priority") el.priorityCard.style.display = "block";
       }
 
-      // ============ TOPICS ============
-      function getTopicsFromData(data) {
-        const set = new Set((data?.statements || []).map(s => s.topic).filter(Boolean));
-        const topics = Array.from(set);
-        // fallback si algo viene raro
-        return topics.length ? topics : ["vivienda","transportes","sanidad","economia","educacion","sociales","otro"];
-      }
-
-      // ============ LANDING / PRIORITY ============
-      function renderPriorityButtons() {
-        const topics = getTopicsFromData(state.data);
-        el.priorityButtons.innerHTML = "";
-
-        topics.forEach((t) => {
-          const b = document.createElement("button");
-          b.className = "btn-outline";
-          b.textContent = t;
-          if (state.priority === t) b.style.borderColor = "#0f172a";
-          b.addEventListener("click", () => {
-            state.priority = state.priority === t ? null : t;
-            renderPriorityButtons();
-          });
-          el.priorityButtons.appendChild(b);
-        });
-      }
-
       // ============ DEMOGRAPHICS ============
       function bindDemographics() {
         const sync = () => {
@@ -673,15 +653,36 @@
           state.demographics.employment = el.demoEmployment?.value || "";
           state.demographics.age = el.demoAge?.value || "";
         };
-
         ["change", "input"].forEach((evt) => {
           el.demoGender?.addEventListener(evt, sync);
           el.demoProvince?.addEventListener(evt, sync);
           el.demoEmployment?.addEventListener(evt, sync);
           el.demoAge?.addEventListener(evt, sync);
         });
-
         sync();
+      }
+
+      // ============ PRIORITY (no depende de render; los botones ya están en HTML) ============
+      function bindPriorityButtons() {
+        const buttons = Array.from(document.querySelectorAll("#priorityButtons [data-topic]"));
+
+        const paint = () => {
+          buttons.forEach((btn) => {
+            const t = btn.getAttribute("data-topic");
+            btn.style.borderColor = "";
+            if (state.priority === t) btn.style.borderColor = "#0f172a";
+          });
+        };
+
+        buttons.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const t = btn.getAttribute("data-topic");
+            state.priority = state.priority === t ? null : t;
+            paint();
+          });
+        });
+
+        paint();
       }
 
       // ============ QUIZ ============
@@ -842,90 +843,9 @@
         });
       }
 
-      // ============ SHARE ============
-      async function buildShareImage() { return null; }
-
-      async function prepareShareAssets() {
-        if (!state.results?.length) return null;
-        const blob = await buildShareImage();
-        if (!blob) return null;
-        if (state.shareImgUrl) URL.revokeObjectURL(state.shareImgUrl);
-        const url = URL.createObjectURL(blob);
-        state.shareImgUrl = url;
-        el.sharePreview.src = url;
-        el.sharePreviewWrap.style.display = "block";
-        return { blob, url };
-      }
-
-      async function shareResults() {
-        if (!state.results?.length) return;
-        const top3 = state.results.slice(0, 3);
-        const text =
-          "Mis resultados (Top 3):\n" +
-          "1) " + (top3[0]?.party || "") + " — " + (top3[0]?.percentage || 0) + "%\n" +
-          "2) " + (top3[1]?.party || "") + " — " + (top3[1]?.percentage || 0) + "%\n" +
-          "3) " + (top3[2]?.party || "") + " — " + (top3[2]?.percentage || 0) + "%\n\n" +
-          "Comparador de programas oficiales · Aragón 2026";
-
-        let blob = null;
-        try {
-          const assets = await prepareShareAssets();
-          blob = assets?.blob || null;
-        } catch { blob = null; }
-
-        if (navigator.share) {
-          try {
-            if (blob) {
-              const file = new File([blob], "resultados-aragon-2026.png", { type: "image/png" });
-              const can = navigator.canShare && navigator.canShare({ files: [file] });
-              if (can) {
-                await navigator.share({ title: "Resultados Aragón 2026", text, files: [file] });
-                return;
-              }
-            }
-            await navigator.share({ title: "Resultados Aragón 2026", text });
-            return;
-          } catch {}
-        }
-
-        try {
-          await navigator.clipboard.writeText(text);
-          alert("Resultados copiados al portapapeles ✅");
-        } catch {
-          alert("No se pudo compartir automáticamente. Copia el texto manualmente.");
-        }
-      }
-
-      async function downloadShareImage() {
-        const assets = await prepareShareAssets();
-        if (!assets?.blob) return;
-        const a = document.createElement("a");
-        a.href = assets.url;
-        a.download = "resultados-aragon-2026.png";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-
-      // ============ DATA LOAD ============
-      async function loadData() {
-        try {
-          const res = await fetch(JSON_URL, { cache: "no-store" });
-          if (!res.ok) throw new Error("HTTP " + res.status);
-          const json = await res.json();
-          state.data = json;
-
-          // re-render priority buttons now that topics exist
-          renderPriorityButtons();
-        } catch (e) {
-          console.error("No se pudo cargar el JSON:", e);
-          alert("Error: no se pudo cargar el archivo JSON del cuestionario. Revisa la ruta JSON_URL.");
-        }
-      }
-
       // ============ EVENTS ============
       el.startBtn.addEventListener("click", () => {
-        show("demographics");                 // 1) primero datos demográficos
+        show("demographics");
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -935,7 +855,7 @@
       });
 
       el.toPriorityBtn.addEventListener("click", () => {
-        show("priority");                     // 2) después prioridad principal
+        show("priority");
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -951,6 +871,7 @@
         }
         show("quiz");
         window.scrollTo({ top: 0, behavior: "smooth" });
+        state.i = 0;
         renderQuestion();
       });
 
@@ -969,16 +890,28 @@
         }
       });
 
-      el.shareBtn.addEventListener("click", shareResults);
-      el.downloadBtn.addEventListener("click", downloadShareImage);
+      // ============ INIT (carga JSON) ============
+      async function loadData() {
+        try {
+          const res = await fetch(JSON_URL, { cache: "no-store" });
+          if (!res.ok) throw new Error("No se pudo cargar el JSON: " + res.status);
+          state.data = await res.json();
+          show("landing");
+        } catch (err) {
+          console.error(err);
+          alert("Error cargando datos del cuestionario. Revisa la ruta del JSON (JSON_URL) y que esté servido por el servidor.");
+          show("landing");
+        }
+      }
 
-      // ============ INIT ============
       bindDemographics();
-      show("landing");
-      loadData(); // <-- carga JSON al arrancar
+      bindPriorityButtons();
+      loadData();
     </script>
   </body>
 </html>
+
+
 
 
 
