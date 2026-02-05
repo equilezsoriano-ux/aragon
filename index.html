@@ -482,8 +482,16 @@
 
     <script>
       // ========= JSON FILE (fetch) =========
-      // Coloca el archivo en la misma carpeta que este HTML o ajusta la ruta.
-      const JSON_URL = "aragon_2026_votecompass_statements_UPDATED_LINKS.json";
+      // ✅ Vite recomendado: pon el JSON en /public/data/ y se leerá como /data/<archivo>.json
+      // ✅ Alternativa: pon el JSON junto al HTML y se leerá como ./<archivo>.json
+      const JSON_FILENAME = "aragon_2026_votecompass_statements_UPDATED_LINKS.json";
+
+      const JSON_URL_CANDIDATES = [
+        "/data/" + JSON_FILENAME,   // Vite: /public/data/...
+        "./data/" + JSON_FILENAME,  // carpeta data junto al HTML
+        "./" + JSON_FILENAME,       // misma carpeta que el HTML
+        JSON_FILENAME               // fallback
+      ];
 
       // ============ CONFIG ============
       const SCALE = [
@@ -577,7 +585,7 @@
         answers: {},
         priority: null,
         results: [],
-        data: null,            // se rellena tras cargar JSON
+        data: null,
         shareImgUrl: null,
         demographics: {
           gender: "",
@@ -662,7 +670,7 @@
         sync();
       }
 
-      // ============ PRIORITY (no depende de render; los botones ya están en HTML) ============
+      // ============ PRIORITY (botones ya están en HTML) ============
       function bindPriorityButtons() {
         const buttons = Array.from(document.querySelectorAll("#priorityButtons [data-topic]"));
 
@@ -890,26 +898,61 @@
         }
       });
 
-      // ============ INIT (carga JSON) ============
+      // ============ INIT (carga JSON robusta) ============
       async function loadData() {
-        try {
-          const res = await fetch(JSON_URL, { cache: "no-store" });
-          if (!res.ok) throw new Error("No se pudo cargar el JSON: " + res.status);
-          state.data = await res.json();
-          show("landing");
-        } catch (err) {
-          console.error(err);
-          alert("Error cargando datos del cuestionario. Revisa la ruta del JSON (JSON_URL) y que esté servido por el servidor.");
-          show("landing");
+        if (location.protocol === "file:") {
+          console.error("Estás abriendo el HTML con file://. fetch() puede fallar por seguridad del navegador.");
+          alert(
+            "Estás abriendo el HTML con file://.\n\n" +
+            "Para cargar el JSON necesitas servirlo con un servidor (por ejemplo Vite, Live Server, etc.).\n" +
+            "Recomendación Vite: pon el JSON en /public/data/ para acceder como /data/" + JSON_FILENAME
+          );
         }
+
+        const errors = [];
+
+        for (const url of JSON_URL_CANDIDATES) {
+          try {
+            const res = await fetch(url, { cache: "no-store" });
+            if (!res.ok) {
+              errors.push(url + " -> HTTP " + res.status);
+              continue;
+            }
+
+            const json = await res.json();
+            if (!json || !Array.isArray(json.statements)) {
+              errors.push(url + " -> JSON inválido (no hay statements[])");
+              continue;
+            }
+
+            state.data = json;
+            console.log("JSON cargado OK desde:", url);
+            show("landing");
+            return;
+          } catch (e) {
+            errors.push(url + " -> " + (e?.message || String(e)));
+          }
+        }
+
+        console.error("No se pudo cargar el JSON. Intentos:", errors);
+        alert(
+          "Error: no se pudo cargar el archivo JSON del cuestionario.\n\n" +
+          "He intentado estas rutas:\n- " + errors.join("\n- ") + "\n\n" +
+          "Solución rápida (Vite): coloca el JSON en /public/data/ y accede como /data/" + JSON_FILENAME
+        );
+
+        show("landing");
       }
 
       bindDemographics();
       bindPriorityButtons();
       loadData();
+      show("landing");
     </script>
   </body>
 </html>
+
+
 
 
 
