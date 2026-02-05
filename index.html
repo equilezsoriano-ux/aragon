@@ -342,29 +342,7 @@
           </p>
 
           <div class="grid2">
-            <div class="field">
-              <label for="demoAge">Edad</label>
-              <select id="demoAge">
-                <option value="">Prefiero no decirlo</option>
-                <option value="16-24">16–24</option>
-                <option value="25-34">25–34</option>
-                <option value="35-44">35–44</option>
-                <option value="45-54">45–54</option>
-                <option value="55-64">55–64</option>
-                <option value="65+">65+</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="demoProvince">Provincia</label>
-              <select id="demoProvince">
-                <option value="">Prefiero no decirlo</option>
-                <option value="Zaragoza">Zaragoza</option>
-                <option value="Huesca">Huesca</option>
-                <option value="Teruel">Teruel</option>
-              </select>
-            </div>
-
+            <!-- 1) Género -->
             <div class="field">
               <label for="demoGender">Género</label>
               <select id="demoGender">
@@ -376,14 +354,42 @@
               </select>
             </div>
 
+            <!-- 2) Provincia -->
             <div class="field">
-              <label for="demoMunicipality">Tamaño de municipio</label>
-              <select id="demoMunicipality">
+              <label for="demoProvince">Provincia</label>
+              <select id="demoProvince">
                 <option value="">Prefiero no decirlo</option>
-                <option value="<5000">&lt; 5.000 hab.</option>
-                <option value="5000-20000">5.000–20.000 hab.</option>
-                <option value="20000-100000">20.000–100.000 hab.</option>
-                <option value="100000+">&gt; 100.000 hab.</option>
+                <option value="Zaragoza">Zaragoza</option>
+                <option value="Huesca">Huesca</option>
+                <option value="Teruel">Teruel</option>
+              </select>
+            </div>
+
+            <!-- 3) Situación laboral -->
+            <div class="field">
+              <label for="demoEmployment">Situación laboral</label>
+              <select id="demoEmployment">
+                <option value="">Prefiero no decirlo</option>
+                <option value="Estudiante/en formación">Estudiante/en formación</option>
+                <option value="Empleado/a con contrato indefinido">Empleado/a con contrato indefinido</option>
+                <option value="Empleado/a temporal">Empleado/a temporal</option>
+                <option value="En paro">En paro</option>
+                <option value="Autónomo/a o Emprendedor/a">Autónomo/a o Emprendedor/a</option>
+                <option value="Jubilado/a o en transición de jubilación">Jubilado/a o en transición de jubilación</option>
+              </select>
+            </div>
+
+            <!-- 4) Edad -->
+            <div class="field">
+              <label for="demoAge">Edad</label>
+              <select id="demoAge">
+                <option value="">Prefiero no decirlo</option>
+                <option value="16-24">16–24</option>
+                <option value="25-34">25–34</option>
+                <option value="35-44">35–44</option>
+                <option value="45-54">45–54</option>
+                <option value="55-64">55–64</option>
+                <option value="65+">65+</option>
               </select>
             </div>
           </div>
@@ -569,7 +575,7 @@
         results: [],
         data: DATA,
         shareImgUrl: null,
-        demographics: { age: "", province: "", gender: "", municipality: "" }
+        demographics: { gender: "", province: "", employment: "", age: "" }
       };
 
       // ============ ELEMENTS ============
@@ -591,11 +597,11 @@
         // priority
         priorityButtons: document.getElementById("priorityButtons"),
 
-        // demographics
-        demoAge: document.getElementById("demoAge"),
-        demoProvince: document.getElementById("demoProvince"),
+        // demographics (nuevo orden/campos)
         demoGender: document.getElementById("demoGender"),
-        demoMunicipality: document.getElementById("demoMunicipality"),
+        demoProvince: document.getElementById("demoProvince"),
+        demoEmployment: document.getElementById("demoEmployment"),
+        demoAge: document.getElementById("demoAge"),
 
         // quiz
         progressFill: document.getElementById("progressFill"),
@@ -658,17 +664,19 @@
 
       function bindDemographics() {
         const sync = () => {
-          state.demographics.age = el.demoAge?.value || "";
-          state.demographics.province = el.demoProvince?.value || "";
           state.demographics.gender = el.demoGender?.value || "";
-          state.demographics.municipality = el.demoMunicipality?.value || "";
+          state.demographics.province = el.demoProvince?.value || "";
+          state.demographics.employment = el.demoEmployment?.value || "";
+          state.demographics.age = el.demoAge?.value || "";
         };
+
         ["change", "input"].forEach((evt) => {
-          el.demoAge?.addEventListener(evt, sync);
-          el.demoProvince?.addEventListener(evt, sync);
           el.demoGender?.addEventListener(evt, sync);
-          el.demoMunicipality?.addEventListener(evt, sync);
+          el.demoProvince?.addEventListener(evt, sync);
+          el.demoEmployment?.addEventListener(evt, sync);
+          el.demoAge?.addEventListener(evt, sync);
         });
+
         sync();
       }
 
@@ -897,7 +905,7 @@
 
       // ============ EVENTS ============
       el.startBtn.addEventListener("click", () => {
-        show("demographics");                 // 1) primero datos demográficos
+        show("demographics");
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -907,7 +915,7 @@
       });
 
       el.toPriorityBtn.addEventListener("click", () => {
-        show("priority");                     // 2) después prioridad principal
+        show("priority");
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -947,6 +955,8 @@
     </script>
   </body>
 </html>
+
+
 
 
 
