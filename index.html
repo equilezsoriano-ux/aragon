@@ -1,846 +1,936 @@
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cuestionario Electoral - Aragon 2026</title>
-    <style>
-      :root {
-        --bg-top: #f8fafc;
-        --bg-bottom: #e2e8f0;
-        --text: #0f172a;
-        --muted: #64748b;
-        --card: #ffffff;
-        --accent: #1f2937;
-        --accent-hover: #374151;
-        --border: #e2e8f0;
-        --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+import React, { useEffect, useMemo, useState } from "react";
+import { ChevronRight, Check, FileText, Shield, Users, TrendingUp, Share2, Download } from "lucide-react";
+
+/**
+ * VITE SETUP
+ * 1) Put JSON in: /public/data/aragon_2026_programas_structured.json
+ * 2) Put PDFs in: /public/pdfs/<file>.pdf
+ * 3) Add `source_pdf` per party in JSON (recommended). Fallback map below if missing.
+ */
+
+const JSON_URL = "/data/aragon_2026_programas_structured.json";
+
+/** Fallback PDF mapping if JSON doesn't include source_pdf per party */
+const partyPdfFallback = {
+  "PP Aragón": "/pdfs/programa_2026.pdf",
+  "PSOE Aragón": "/pdfs/Programa-Electoral-PSOE-Aragon-2026-2030.pdf",
+  "VOX Aragón": "/pdfs/PROGRAMA-ELECTORAL-VOX-ARAGON-2026.pdf",
+  "Podemos - Alianza Verde": "/pdfs/Programa completo Podemos-Alianza Verde.pdf",
+  "IU / Sumar": "/pdfs/iu_sumar_programa_revista.pdf",
+  "CHA": "/pdfs/CHA2026.pdf",
+  "PAR": "/pdfs/programa2026PAR.pdf",
+  "Aragón Existe": "/pdfs/Programa Aragon Existe 8F BREVE -1-.pdf",
+  "SALF": "/pdfs/Contrato Electoral Aragon SALF 2026.pdf"
+};
+
+/** Human labels for prefixes (for results UI) */
+const prefixLabel = {
+  vivienda: "Vivienda",
+  transportes: "Transportes",
+  sanidad: "Sanidad",
+  economia: "Economía y empleo",
+  educacion: "Educación",
+  sociales: "Políticas sociales",
+  otro: "Otro"
+};
+
+/** Tag -> label (for results UI) */
+const labelMap = {
+  // Vivienda
+  "vivienda.control_alquiler": "Control del precio del alquiler",
+  "vivienda.vivienda_publica": "Construcción de vivienda pública",
+  "vivienda.ayudas_compra": "Ayudas a compra de primera vivienda",
+  "vivienda.proteccion_propietario": "Protección a propietarios",
+  "vivienda.regulacion_turistica": "Regulación turística",
+
+  // Transportes
+  "transportes.transporte_publico_barato": "Transporte público más barato",
+  "transportes.carreteras_inversion": "Más inversión en carreteras",
+  "transportes.movilidad_sostenible": "Movilidad sostenible",
+  "transportes.infraestructura_rural": "Infraestructura rural",
+  "transportes.ferrocarril_inversion": "Más inversión en ferrocarril (cercanías/media distancia)",
+
+  // Sanidad
+  "sanidad.listas_espera": "Reducir listas de espera",
+  "sanidad.mas_inversion_publica": "Más inversión pública",
+  "sanidad.colaboracion_publico_privada": "Colaboración público-privada",
+  "sanidad.atencion_primaria": "Refuerzo de atención primaria",
+  "sanidad.financiacion_privada": "Incentivar opciones privadas/complementarias",
+
+  // Economía
+  "economia.bajada_impuestos": "Bajada de impuestos",
+  "economia.apoyo_pymes": "Apoyo a pymes",
+  "economia.empleo_publico": "Creación de empleo público",
+  "economia.atraccion_inversion": "Atracción de inversión",
+  "economia.proteccion_laboral": "Protección laboral",
+
+  // Educación / Sociales
+  "educacion.educacion_publica": "Educación pública",
+  "educacion.cheque_escolar": "Cheque escolar",
+  "educacion.financiacion_privada": "Incentivar opciones privadas/concertadas",
+  "sociales.igualdad": "Políticas de igualdad",
+  "sociales.apoyo_familias": "Apoyo a familias",
+  "sociales.dependencia": "Dependencia",
+
+  // Otro
+  "otro.medio_ambiente": "Medio ambiente",
+  "otro.inmigracion": "Inmigración",
+  "otro.seguridad": "Seguridad",
+  "otro.digitalizacion": "Digitalización",
+  "otro.mundo_rural": "Mundo rural",
+  "otro.politicas_sociales": "Políticas sociales"
+};
+
+/** Demographics mapping (optional tags, not used in scoring by default) */
+const laborMap = {
+  "Estudiante / en formación": "situacion_laboral.estudiante",
+  "Empleado/a con contrato estable": "situacion_laboral.empleo_estable",
+  "Empleado/a temporal": "situacion_laboral.empleo_temporal",
+  "Autónomo/a o emprendedor/a": "situacion_laboral.autonomo",
+  "Jubilado/a o en transición a la jubilación": "situacion_laboral.jubilacion"
+};
+
+function uniq(arr) {
+  return Array.from(new Set(arr));
+}
+
+function tagPrefix(tag) {
+  return (tag || "").split(".")[0];
+}
+
+/** Build a share image (1200x630) for socials */
+async function buildShareImage({ title, subtitle, top3 }) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  ctx.fillStyle = "#0f172a"; // slate-900
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Card
+  ctx.fillStyle = "#ffffff";
+  roundRect(ctx, 60, 60, 1080, 510, 24);
+  ctx.fill();
+
+  // Title
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "bold 44px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillText(title, 110, 150);
+
+  // Subtitle
+  ctx.fillStyle = "#334155"; // slate-700
+  ctx.font = "26px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  wrapText(ctx, subtitle, 110, 195, 980, 32);
+
+  // Top 3
+  const startY = 285;
+  const rowH = 92;
+
+  top3.forEach((r, i) => {
+    const y = startY + i * rowH;
+
+    // rank bubble
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath();
+    ctx.arc(135, y - 8, 26, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 28px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(String(i + 1), 135, y + 2);
+
+    // Party
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 30px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText(r.party, 190, y);
+
+    // Percentage
+    ctx.fillStyle = "#334155";
+    ctx.font = "24px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillText(`${r.percentage}% afinidad`, 190, y + 34);
+
+    // bar background
+    ctx.fillStyle = "#e2e8f0"; // slate-200
+    roundRect(ctx, 520, y - 30, 560, 18, 10);
+    ctx.fill();
+
+    // bar fill
+    ctx.fillStyle = "#0f172a";
+    roundRect(ctx, 520, y - 30, Math.max(8, 560 * (r.percentage / 100)), 18, 10);
+    ctx.fill();
+  });
+
+  // Footer
+  ctx.fillStyle = "#64748b"; // slate-500
+  ctx.font = "20px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+  ctx.fillText("Comparador de programas oficiales · Aragón 2026", 110, 545);
+
+  return await new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), "image/png", 0.95);
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const min = Math.min(w, h);
+  if (r > min / 2) r = min / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = (text || "").split(" ");
+  let line = "";
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + " ";
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && n > 0) {
+      ctx.fillText(line, x, y);
+      line = words[n] + " ";
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
+}
+
+const PoliticalQuiz = () => {
+  const [stage, setStage] = useState("landing"); // landing, quiz, loading, results
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [results, setResults] = useState(null);
+
+  const [programJson, setProgramJson] = useState(null);
+  const [jsonError, setJsonError] = useState(null);
+
+  // Share helpers
+  const [shareImgUrl, setShareImgUrl] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  useEffect(() => {
+    fetch(JSON_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error(`No se pudo cargar ${JSON_URL} (${r.status})`);
+        return r.json();
+      })
+      .then((data) => setProgramJson(data))
+      .catch((e) => setJsonError(e.message));
+  }, []);
+
+  // Optional: set meta description dynamically (if you prefer not to touch index.html)
+  // Still recommended to set it in /index.html.
+  useEffect(() => {
+    const content =
+      "¿Qué partido encaja mejor contigo en estas elecciones de Aragón 2026? Responde 8 preguntas rápidas y descubre qué propuestas se alinean más con tus prioridades.";
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "description");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", content);
+  }, []);
+
+  const questions = useMemo(
+    () => [
+      {
+        id: "demografia",
+        title: "Información demográfica (recomendado)",
+        type: "demographic",
+        fields: [
+          { name: "genero", label: "Género", type: "select", options: ["Prefiero no decir", "Hombre", "Mujer", "Otro"] },
+          { name: "provincia", label: "Provincia", type: "select", options: ["Prefiero no decir", "Zaragoza", "Huesca", "Teruel"] },
+          {
+            name: "situacion_laboral",
+            label: "Situación laboral",
+            type: "select",
+            options: [
+              "Prefiero no decir",
+              "Estudiante / en formación",
+              "Empleado/a con contrato estable",
+              "Empleado/a temporal",
+              "Autónomo/a o emprendedor/a",
+              "Jubilado/a o en transición a la jubilación"
+            ]
+          },
+          { name: "vivienda_status", label: "Situación de vivienda", type: "select", options: ["Prefiero no decir", "Alquiler", "Propietario", "Multipropiedad", "Otra"] }
+        ]
+      },
+
+      // Multi-select (>=5 options): allow up to 2
+      {
+        id: "vivienda",
+        title: "¿Qué es más prioritario para ti en vivienda? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Control del precio del alquiler", value: "vivienda.control_alquiler" },
+          { label: "Construcción de vivienda pública", value: "vivienda.vivienda_publica" },
+          { label: "Ayudas a compra de primera vivienda", value: "vivienda.ayudas_compra" },
+          { label: "Protección a propietarios", value: "vivienda.proteccion_propietario" },
+          { label: "Regulación turística", value: "vivienda.regulacion_turistica" }
+        ]
+      },
+
+      // Add 5th option + multi
+      {
+        id: "transportes",
+        title: "¿Qué es más importante en transportes? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Transporte público más barato", value: "transportes.transporte_publico_barato" },
+          { label: "Más inversión en carreteras", value: "transportes.carreteras_inversion" },
+          { label: "Movilidad sostenible", value: "transportes.movilidad_sostenible" },
+          { label: "Infraestructura rural", value: "transportes.infraestructura_rural" },
+          { label: "Más inversión en ferrocarril", value: "transportes.ferrocarril_inversion" }
+        ]
+      },
+
+      // Multi (>=5) including private financing option
+      {
+        id: "sanidad",
+        title: "¿Qué priorizas en sanidad? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Reducir listas de espera", value: "sanidad.listas_espera" },
+          { label: "Más inversión pública", value: "sanidad.mas_inversion_publica" },
+          { label: "Colaboración público-privada", value: "sanidad.colaboracion_publico_privada" },
+          { label: "Refuerzo de atención primaria", value: "sanidad.atencion_primaria" },
+          { label: "Incentivar opciones privadas/complementarias", value: "sanidad.financiacion_privada" }
+        ]
+      },
+
+      // Multi (>=5)
+      {
+        id: "economia",
+        title: "¿Qué es más prioritario en economía y empleo? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Bajada de impuestos", value: "economia.bajada_impuestos" },
+          { label: "Apoyo a pymes", value: "economia.apoyo_pymes" },
+          { label: "Creación de empleo público", value: "economia.empleo_publico" },
+          { label: "Atracción de inversión", value: "economia.atraccion_inversion" },
+          { label: "Protección laboral", value: "economia.proteccion_laboral" }
+        ]
+      },
+
+      // Multi (>=5) includes private financing option
+      {
+        id: "educacion_sociales",
+        title: "¿Qué priorizas en educación y políticas sociales? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Educación pública", value: "educacion.educacion_publica" },
+          { label: "Cheque escolar", value: "educacion.cheque_escolar" },
+          { label: "Incentivar opciones privadas/concertadas", value: "educacion.financiacion_privada" },
+          { label: "Políticas de igualdad", value: "sociales.igualdad" },
+          { label: "Apoyo a familias", value: "sociales.apoyo_familias" },
+          { label: "Dependencia", value: "sociales.dependencia" }
+        ]
+      },
+
+      // Multi (>=5), split inmigración and seguridad
+      {
+        id: "otro",
+        title: "¿Qué tema adicional te preocupa más? (Puedes elegir hasta 2)",
+        type: "multi",
+        maxSelections: 2,
+        options: [
+          { label: "Medio ambiente", value: "otro.medio_ambiente" },
+          { label: "Inmigración", value: "otro.inmigracion" },
+          { label: "Seguridad", value: "otro.seguridad" },
+          { label: "Digitalización", value: "otro.digitalizacion" },
+          { label: "Mundo rural", value: "otro.mundo_rural" },
+          { label: "Políticas sociales", value: "otro.politicas_sociales" }
+        ]
+      },
+
+      {
+        id: "prioridad",
+        title: "Si tuvieras que elegir solo una prioridad principal:",
+        type: "priority",
+        options: [
+          { label: "Vivienda", value: "vivienda" },
+          { label: "Transportes", value: "transportes" },
+          { label: "Sanidad", value: "sanidad" },
+          { label: "Economía y empleo", value: "economia" },
+          { label: "Educación", value: "educacion" },
+          { label: "Políticas sociales", value: "sociales" },
+          { label: "Otro", value: "otro" }
+        ]
       }
-
-      * { box-sizing: border-box; }
-
-      body {
-        margin: 0;
-        font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
-        color: var(--text);
-        background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
-      }
-
-      .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        padding: 64px 20px 96px;
-      }
-
-      .center { text-align: center; }
-
-      .hero h1 {
-        font-size: clamp(28px, 5vw, 48px);
-        margin: 0 0 16px;
-        line-height: 1.1;
-      }
-
-      .hero p {
-        font-size: clamp(16px, 2.5vw, 20px);
-        color: var(--muted);
-        margin: 0 0 24px;
-      }
-
-      .cta {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        background: var(--accent);
-        color: #fff;
-        padding: 14px 24px;
-        border-radius: 10px;
-        text-decoration: none;
-        font-weight: 600;
-        transition: background 0.2s ease;
-        border: none;
-        cursor: pointer;
-      }
-
-      .cta:hover { background: var(--accent-hover); }
-
-      .cta:disabled { background: #94a3b8; cursor: not-allowed; }
-
-      .note {
-        margin-top: 12px;
-        font-size: 13px;
-        color: var(--muted);
-      }
-
-      .card {
-        background: var(--card);
-        border-radius: 16px;
-        box-shadow: var(--shadow);
-        padding: 32px;
-      }
-
-      .how { margin-bottom: 48px; }
-
-      .how h2,
-      .neutral h2 {
-        margin: 0 0 24px;
-        text-align: center;
-        font-size: 24px;
-      }
-
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 24px;
-      }
-
-      .step { text-align: center; }
-
-      .icon {
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        background: #f1f5f9;
-        display: grid;
-        place-items: center;
-        margin: 0 auto 12px;
-        font-weight: 700;
-        color: #334155;
-      }
-
-      .step h3 { margin: 0 0 6px; font-size: 16px; }
-      .step p { margin: 0; color: var(--muted); font-size: 14px; }
-
-      .neutral {
-        background: #111827;
-        color: #fff;
-        border-radius: 16px;
-        padding: 28px;
-      }
-
-      .neutral h2 {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        font-size: 22px;
-      }
-
-      .neutral ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 14px;
-      }
-
-      .neutral li {
-        display: flex;
-        gap: 10px;
-        align-items: flex-start;
-        color: #e2e8f0;
-        font-size: 14px;
-      }
-
-      .check { font-weight: 700; }
-
-      .progress { margin-bottom: 24px; }
-
-      .progress-bar {
-        height: 8px;
-        background: #e2e8f0;
-        border-radius: 999px;
-        overflow: hidden;
-      }
-
-      .progress-fill {
-        height: 100%;
-        background: #1f2937;
-        width: 0%;
-        transition: width 0.3s ease;
-      }
-
-      .question-title {
-        font-size: 22px;
-        margin: 0 0 18px;
-      }
-
-      .options { display: grid; gap: 10px; }
-
-      .option-btn {
-        text-align: left;
-        padding: 14px 16px;
-        border-radius: 10px;
-        border: 2px solid #e2e8f0;
-        background: #fff;
-        font-weight: 600;
-        color: #0f172a;
-        cursor: pointer;
-        transition: border 0.2s ease, background 0.2s ease;
-      }
-
-      .option-btn:hover { border-color: #1f2937; background: #f8fafc; }
-      .option-btn.selected { border-color: #1f2937; background: #f8fafc; }
-
-      .form-grid { display: grid; gap: 16px; }
-
-      label { font-size: 14px; font-weight: 600; color: #334155; }
-
-      select {
-        width: 100%;
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 2px solid #e2e8f0;
-        background: #fff;
-        font-size: 14px;
-      }
-
-      .loading {
-        display: grid;
-        place-items: center;
-        min-height: 60vh;
-        text-align: center;
-      }
-
-      .spinner {
-        width: 56px;
-        height: 56px;
-        border: 4px solid #e2e8f0;
-        border-top-color: #1f2937;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 16px;
-      }
-
-      @keyframes spin { to { transform: rotate(360deg); } }
-
-      .result-card {
-        background: #fff;
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: var(--shadow);
-      }
-
-      .result-head {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-
-      .badge { font-size: 28px; }
-
-      .muted { color: var(--muted); }
-
-      .tag-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
-
-      .tag-list li { font-size: 14px; color: #475569; }
-
-      .result-footer { margin-top: 12px; }
-
-      .link {
-        color: #1f2937;
-        text-decoration: none;
-        font-weight: 600;
-        font-size: 14px;
-      }
-
-      .link:hover { color: #374151; }
-
-      .small { font-size: 13px; color: var(--muted); }
-
-      .hidden { display: none; }
-
-      @media (max-width: 600px) {
-        .container { padding: 48px 16px 72px; }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="container">
-      <!-- LANDING -->
-      <section id="landing" class="hero center">
-        <h1>¿Qué partido encaja mejor contigo en estas elecciones?</h1>
-        <p>Responde 8 preguntas rápidas y descubre qué propuestas se alinean más con tus prioridades.</p>
-        <button id="startBtn" class="cta">Empezar cuestionario <span aria-hidden="true">›</span></button>
-        <div class="note">Herramienta informativa basada en programas oficiales. Sin afiliación política.</div>
-
-        <div class="card how" style="margin-top:48px;">
-          <h2>¿Cómo funciona?</h2>
-          <div class="grid">
-            <div class="step">
-              <div class="icon">1</div>
-              <h3>Responde 8 preguntas</h3>
-              <p>Sobre vivienda, sanidad, economía y más.</p>
-            </div>
-            <div class="step">
-              <div class="icon">2</div>
-              <h3>Comparamos tus respuestas</h3>
-              <p>Con programas electorales oficiales.</p>
-            </div>
-            <div class="step">
-              <div class="icon">3</div>
-              <h3>Ranking personalizado</h3>
-              <p>Recibes porcentaje de afinidad y razones.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="neutral">
-          <h2><span aria-hidden="true">🛡</span> Garantias de neutralidad</h2>
-          <ul>
-            <li><span class="check">✓</span>Basado en programas oficiales</li>
-            <li><span class="check">✓</span>Sin afiliacion politica</li>
-            <li><span class="check">✓</span>No guardamos datos personales</li>
-            <li><span class="check">✓</span>Metodologia transparente</li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- QUIZ -->
-      <section id="quiz" class="hidden">
-        <div class="progress">
-          <div class="progress-bar">
-            <div id="progressFill" class="progress-fill"></div>
-          </div>
-          <div id="progressText" class="small" style="text-align:center; margin-top:8px;">Pregunta 1 de 8</div>
-        </div>
-
-        <div class="card">
-          <h2 id="questionTitle" class="question-title"></h2>
-          <p id="questionHelp" class="small" style="margin-top:-8px; margin-bottom:18px;"></p>
-          <p id="multiHelp" class="small hidden" style="margin-top:-8px; margin-bottom:18px;"></p>
-
-          <div id="demographicForm" class="form-grid hidden"></div>
-          <div id="options" class="options"></div>
-          <button id="multiContinue" class="cta hidden" style="margin-top:16px;">Continuar</button>
-        </div>
-      </section>
-
-      <!-- LOADING -->
-      <section id="loading" class="hidden loading">
-        <div>
-          <div class="spinner"></div>
-          <div class="muted" style="font-size:18px;">Analizando tu perfil y comparándolo con los programas electorales...</div>
-        </div>
-      </section>
-
-      <!-- RESULTS -->
-      <section id="results" class="hidden">
-        <div class="center" style="margin-bottom:32px;">
-          <h1 style="margin-bottom:8px;">Tus resultados</h1>
-          <p class="muted">Basados en la comparación con los programas electorales oficiales</p>
-        </div>
-
-        <div id="resultsList" class="grid" style="grid-template-columns: 1fr; gap:16px; margin-bottom:24px;"></div>
-
-        <div class="card center" style="background:#f1f5f9;">
-          <p class="small">Esta herramienta compara tus respuestas con los programas oficiales. No sustituye el criterio personal ni recomienda el voto.</p>
-        </div>
-
-        <div class="center" style="margin-top:24px;">
-          <button id="restartBtn" class="cta" style="background:#334155;">Volver a empezar</button>
-        </div>
-      </section>
-    </main>
-
-    <script src="./program-data.js"></script>
-    <script>
-      const JSON_URL = "./aragon_2026_programas_structured.json";
-      const MAX_MULTI = 2;
-      const PRIORITY_MULTIPLIER = 2;
-
-      const partyPdfFallback = {
-        "PP Aragón": "/pdfs/programa_2026.pdf",
-        "PSOE Aragón": "/pdfs/Programa-Electoral-PSOE-Aragon-2026-2030.pdf",
-        "VOX Aragón": "/pdfs/PROGRAMA-ELECTORAL-VOX-ARAGON-2026.pdf",
-        "Podemos - Alianza Verde": "/pdfs/Programa completo Podemos-Alianza Verde.pdf",
-        "IU / Sumar": "/pdfs/iu_sumar_programa_revista.pdf",
-        "CHA": "/pdfs/CHA2026.pdf",
-        "PAR": "/pdfs/programa2026PAR.pdf",
-        "Partido Aragonés (PAR)": "/pdfs/programa2026PAR.pdf",
-        "Aragón Existe": "/pdfs/Programa Aragon Existe 8F BREVE -1-.pdf",
-        "SALF": "/pdfs/Contrato Electoral Aragon SALF 2026.pdf",
-        "SALF (Se Acabó La Fiesta)": "/pdfs/Contrato Electoral Aragon SALF 2026.pdf"
-      };
-
-      const prefixLabel = {
-        vivienda: "Vivienda",
-        transportes: "Transportes",
-        sanidad: "Sanidad",
-        economia: "Economía y empleo",
-        educacion: "Educación",
-        sociales: "Políticas sociales",
-        otro: "Otro"
-      };
-
-      const labelMap = {
-        "vivienda.control_alquiler": "Control del precio del alquiler",
-        "vivienda.vivienda_publica": "Construcción de vivienda pública",
-        "vivienda.ayudas_compra": "Ayudas a compra de primera vivienda",
-        "vivienda.proteccion_propietario": "Protección a propietarios",
-        "vivienda.regulacion_turistica": "Regulación turística",
-
-        "transportes.transporte_publico_barato": "Transporte público más barato",
-        "transportes.carreteras_inversion": "Más inversión en carreteras",
-        "transportes.movilidad_sostenible": "Movilidad sostenible",
-        "transportes.infraestructura_rural": "Infraestructura rural",
-        "transportes.ferrocarril_inversion": "Más inversión en ferrocarril (cercanías/medio recorrido)",
-
-        "sanidad.listas_espera": "Reducir listas de espera",
-        "sanidad.mas_inversion_publica": "Más inversión pública",
-        "sanidad.colaboracion_publico_privada": "Colaboración público-privada",
-        "sanidad.atencion_primaria": "Refuerzo de atención primaria",
-        "sanidad.financiacion_privada": "Incentivos a seguros/financiación privada (complementaria)",
-
-        "economia.bajada_impuestos": "Bajada de impuestos",
-        "economia.apoyo_pymes": "Apoyo a pymes",
-        "economia.empleo_publico": "Creación de empleo público",
-        "economia.atraccion_inversion": "Atracción de inversión",
-        "economia.proteccion_laboral": "Protección laboral",
-
-        "educacion.educacion_publica": "Educación pública",
-        "educacion.cheque_escolar": "Cheque escolar",
-        "educacion.financiacion_privada": "Más peso a concertada/privada (financiación/bonos)",
-
-        "sociales.igualdad": "Políticas de igualdad",
-        "sociales.apoyo_familias": "Apoyo a familias",
-        "sociales.dependencia": "Dependencia",
-
-        "otro.medio_ambiente": "Medio ambiente",
-        "otro.inmigracion": "Inmigración",
-        "otro.seguridad": "Seguridad",
-        "otro.digitalizacion": "Digitalización",
-        "otro.mundo_rural": "Mundo rural",
-        "otro.politicas_sociales": "Políticas sociales"
-      };
-
-      const laborMap = {
-        "Estudiante / en formación": "situacion_laboral.estudiante",
-        "Empleado/a con contrato estable": "situacion_laboral.empleo_estable",
-        "Empleado/a temporal": "situacion_laboral.empleo_temporal",
-        "Autónomo/a o emprendedor/a": "situacion_laboral.autonomo",
-        "Jubilado/a o en transición a la jubilación": "situacion_laboral.jubilacion"
-      };
-
-      const questions = [
-        {
-          id: "demografia",
-          title: "Información demográfica (recomendado)",
-          type: "demographic",
-          help: "Esta información no afecta al ranking (por defecto).",
-          fields: [
-            { name: "genero", label: "Género", options: ["Prefiero no decir", "Hombre", "Mujer", "Otro"] },
-            { name: "provincia", label: "Provincia", options: ["Prefiero no decir", "Zaragoza", "Huesca", "Teruel"] },
-            {
-              name: "situacion_laboral",
-              label: "Situación laboral",
-              options: [
-                "Prefiero no decir",
-                "Estudiante / en formación",
-                "Empleado/a con contrato estable",
-                "Empleado/a temporal",
-                "Autónomo/a o emprendedor/a",
-                "Jubilado/a o en transición a la jubilación"
-              ]
-            },
-            { name: "vivienda_status", label: "Situación de vivienda", options: ["Prefiero no decir", "Alquiler", "Propietario", "Multipropiedad", "Otra"] }
-          ]
-        },
-        {
-          id: "vivienda",
-          title: "¿Qué es más prioritario para ti en vivienda?",
-          options: [
-            { label: "Control del precio del alquiler", value: "vivienda.control_alquiler" },
-            { label: "Construcción de vivienda pública", value: "vivienda.vivienda_publica" },
-            { label: "Ayudas a compra de primera vivienda", value: "vivienda.ayudas_compra" },
-            { label: "Protección a propietarios", value: "vivienda.proteccion_propietario" },
-            { label: "Regulación turística", value: "vivienda.regulacion_turistica" }
-          ]
-        },
-        {
-          id: "transportes",
-          title: "¿Qué es más importante en transportes?",
-          options: [
-            { label: "Transporte público más barato", value: "transportes.transporte_publico_barato" },
-            { label: "Más inversión en carreteras", value: "transportes.carreteras_inversion" },
-            { label: "Movilidad sostenible", value: "transportes.movilidad_sostenible" },
-            { label: "Infraestructura rural", value: "transportes.infraestructura_rural" },
-            { label: "Más inversión en ferrocarril (cercanías/medio recorrido)", value: "transportes.ferrocarril_inversion" }
-          ]
-        },
-        {
-          id: "sanidad",
-          title: "¿Qué priorizas en sanidad?",
-          options: [
-            { label: "Reducir listas de espera", value: "sanidad.listas_espera" },
-            { label: "Más inversión pública", value: "sanidad.mas_inversion_publica" },
-            { label: "Colaboración público-privada", value: "sanidad.colaboracion_publico_privada" },
-            { label: "Refuerzo de atención primaria", value: "sanidad.atencion_primaria" },
-            { label: "Incentivos a seguros/financiación privada (complementaria)", value: "sanidad.financiacion_privada" }
-          ]
-        },
-        {
-          id: "economia",
-          title: "¿Qué es más prioritario en economía y empleo?",
-          options: [
-            { label: "Bajada de impuestos", value: "economia.bajada_impuestos" },
-            { label: "Apoyo a pymes", value: "economia.apoyo_pymes" },
-            { label: "Creación de empleo público", value: "economia.empleo_publico" },
-            { label: "Atracción de inversión", value: "economia.atraccion_inversion" },
-            { label: "Protección laboral", value: "economia.proteccion_laboral" }
-          ]
-        },
-        {
-          id: "educacion_sociales",
-          title: "¿Qué priorizas en educación y políticas sociales?",
-          options: [
-            { label: "Educación pública", value: "educacion.educacion_publica" },
-            { label: "Cheque escolar", value: "educacion.cheque_escolar" },
-            { label: "Más peso a concertada/privada (financiación/bonos)", value: "educacion.financiacion_privada" },
-            { label: "Políticas de igualdad", value: "sociales.igualdad" },
-            { label: "Apoyo a familias", value: "sociales.apoyo_familias" },
-            { label: "Dependencia", value: "sociales.dependencia" }
-          ]
-        },
-        {
-          id: "otro",
-          title: "¿Qué tema adicional te preocupa más?",
-          options: [
-            { label: "Medio ambiente", value: "otro.medio_ambiente" },
-            { label: "Inmigración", value: "otro.inmigracion" },
-            { label: "Seguridad", value: "otro.seguridad" },
-            { label: "Digitalización", value: "otro.digitalizacion" },
-            { label: "Mundo rural", value: "otro.mundo_rural" },
-            { label: "Políticas sociales", value: "otro.politicas_sociales" }
-          ]
-        },
-        {
-          id: "prioridad",
-          title: "Si tuvieras que elegir solo una prioridad principal:",
-          type: "priority",
-          options: [
-            { label: "Vivienda", value: "vivienda" },
-            { label: "Transportes", value: "transportes" },
-            { label: "Sanidad", value: "sanidad" },
-            { label: "Economía y empleo", value: "economia" },
-            { label: "Educación", value: "educacion" },
-            { label: "Políticas sociales", value: "sociales" },
-            { label: "Otro", value: "otro" }
-          ]
-        }
-      ];
-
-      const state = {
-        stage: "landing",
-        currentQuestion: 0,
-        answers: {},
-        results: [],
-        programJson: null
-      };
-
-      const el = {
-        landing: document.getElementById("landing"),
-        quiz: document.getElementById("quiz"),
-        loading: document.getElementById("loading"),
-        results: document.getElementById("results"),
-        startBtn: document.getElementById("startBtn"),
-        restartBtn: document.getElementById("restartBtn"),
-        progressFill: document.getElementById("progressFill"),
-        progressText: document.getElementById("progressText"),
-        questionTitle: document.getElementById("questionTitle"),
-        questionHelp: document.getElementById("questionHelp"),
-        multiHelp: document.getElementById("multiHelp"),
-        demographicForm: document.getElementById("demographicForm"),
-        options: document.getElementById("options"),
-        multiContinue: document.getElementById("multiContinue"),
-        resultsList: document.getElementById("resultsList")
-      };
-
-      function show(stage) {
-        state.stage = stage;
-        el.landing.classList.toggle("hidden", stage !== "landing");
-        el.quiz.classList.toggle("hidden", stage !== "quiz");
-        el.loading.classList.toggle("hidden", stage !== "loading");
-        el.results.classList.toggle("hidden", stage !== "results");
-      }
-
-      function isMultiSelectQuestion(q) {
-        if (!q || !q.options || q.type === "priority" || q.type === "demographic") return false;
-        return q.options.length >= 5;
-      }
-
-      function getPartyPdfUrl(partyName) {
-        if (!state.programJson || !state.programJson.parties) return null;
-        const p = state.programJson.parties.find((x) => x.party === partyName);
-        return (p && p.source_pdf) || partyPdfFallback[partyName] || null;
-      }
-
-      function getPartyTags(partyObj) {
-        const t = partyObj.topics || {};
-        const economyTopic = t.economia_empleo || t.economia || null;
-        const eduSocTopic = t.educacion_politicas_sociales || t.educacion_sociales || t.educacion || null;
-        const tags = [
-          ...(t.vivienda?.tags || []),
-          ...(t.transportes?.tags || []),
-          ...(t.sanidad?.tags || []),
-          ...((economyTopic && economyTopic.tags) || []),
-          ...((eduSocTopic && eduSocTopic.tags) || []),
-          ...(t.otro?.tags || [])
-        ];
-        return new Set(tags);
-      }
-
-      function calculateResults(answersOverride) {
-        if (!state.programJson || !state.programJson.parties) return [];
-
-        const selectedTags = Object.entries(answersOverride)
-          .filter(([qid]) => qid !== "demografia" && qid !== "prioridad")
-          .flatMap(([, v]) => (Array.isArray(v) ? v : [v]))
-          .filter(Boolean);
-
-        const maxScore = selectedTags.length * PRIORITY_MULTIPLIER;
-
-        return state.programJson.parties
-          .map((p) => {
-            const partyTags = getPartyTags(p);
-            let score = 0;
-            const matchList = [];
-
-            selectedTags.forEach((tag) => {
-              if (!partyTags.has(tag)) return;
-              let points = 1;
-              if (answersOverride.prioridad && tag.startsWith(answersOverride.prioridad + ".")) {
-                points = PRIORITY_MULTIPLIER;
-              }
-              score += points;
-              const prefix = tag.split(".")[0];
-              matchList.push({
-                category: prefixLabel[prefix] || prefix,
-                match: labelMap[tag] || tag
-              });
-            });
-
-            return {
-              party: p.party,
-              score,
-              percentage: maxScore ? Math.round((score / maxScore) * 100) : 0,
-              matches: matchList
-            };
-          })
-          .sort((a, b) => b.score - a.score);
-      }
-
-      function renderQuestion() {
-        const q = questions[state.currentQuestion];
-        const progress = ((state.currentQuestion + 1) / questions.length) * 100;
-
-        el.progressFill.style.width = progress + "%";
-        el.progressText.textContent = "Pregunta " + (state.currentQuestion + 1) + " de " + questions.length;
-        el.questionTitle.textContent = q.title;
-        el.questionHelp.textContent = q.help || "";
-
-        el.options.innerHTML = "";
-        el.demographicForm.innerHTML = "";
-        el.multiHelp.classList.add("hidden");
-        el.multiContinue.classList.add("hidden");
-
-        if (q.type === "demographic") {
-          el.options.classList.add("hidden");
-          el.demographicForm.classList.remove("hidden");
-
-          q.fields.forEach((f) => {
-            const wrapper = document.createElement("div");
-            const label = document.createElement("label");
-            label.textContent = f.label;
-            const select = document.createElement("select");
-            f.options.forEach((opt) => {
-              const option = document.createElement("option");
-              option.value = opt;
-              option.textContent = opt;
-              select.appendChild(option);
-            });
-            select.addEventListener("change", (e) => {
-              state.answers.demografia = state.answers.demografia || {};
-              state.answers.demografia[f.name] = e.target.value;
-            });
-            wrapper.appendChild(label);
-            wrapper.appendChild(select);
-            el.demographicForm.appendChild(wrapper);
+    ],
+    []
+  );
+
+  const getPartyPdfUrl = (partyName) => {
+    const p = programJson?.parties?.find((x) => x.party === partyName);
+    return p?.source_pdf || partyPdfFallback[partyName] || null;
+  };
+
+  const getPartyTags = (partyObj) => {
+    const t = partyObj?.topics || {};
+    return new Set([
+      ...(t.vivienda?.tags || []),
+      ...(t.transportes?.tags || []),
+      ...(t.sanidad?.tags || []),
+      ...(t.economia_empleo?.tags || []),
+      ...(t.educacion_politicas_sociales?.tags || []),
+      ...(t.otro?.tags || [])
+    ]);
+  };
+
+  const calculateResults = () => {
+    if (!programJson?.parties?.length) return [];
+
+    // flatten all selected tags (multi answers are arrays)
+    const selectedTags = uniq(
+      Object.entries(answers)
+        .filter(([qid]) => qid !== "demografia" && qid !== "prioridad")
+        .flatMap(([, v]) => (Array.isArray(v) ? v : [v]))
+        .filter(Boolean)
+    );
+
+    const priority = answers.prioridad || null;
+
+    // Max score = sum of per-tag weight assuming every selected tag matched
+    const maxScore = selectedTags.reduce((acc, tag) => {
+      const w = priority && tag.startsWith(`${priority}.`) ? 2 : 1; // x2 for priority area
+      return acc + w;
+    }, 0);
+
+    const ranked = programJson.parties
+      .map((p) => {
+        const partyName = p.party;
+        const partyTags = getPartyTags(p);
+
+        let score = 0;
+        const matchList = [];
+
+        selectedTags.forEach((tag) => {
+          if (!partyTags.has(tag)) return;
+
+          const w = priority && tag.startsWith(`${priority}.`) ? 2 : 1; // x2
+          score += w;
+
+          const prefix = tagPrefix(tag);
+          matchList.push({
+            category: prefixLabel[prefix] || prefix,
+            match: labelMap[tag] || tag,
+            tag
           });
-
-          const btn = document.createElement("button");
-          btn.className = "cta";
-          btn.textContent = "Continuar";
-          btn.addEventListener("click", () => {
-            const data = state.answers.demografia || {};
-            if (laborMap[data.situacion_laboral]) {
-              data.situacion_laboral_tag = laborMap[data.situacion_laboral];
-            }
-            state.answers.demografia = data;
-            nextQuestion();
-          });
-          el.demographicForm.appendChild(btn);
-          return;
-        }
-
-        el.demographicForm.classList.add("hidden");
-        el.options.classList.remove("hidden");
-
-        const multi = isMultiSelectQuestion(q);
-        const selected = state.answers[q.id];
-        const selectedCount = Array.isArray(selected) ? selected.length : 0;
-
-        if (multi) {
-          el.multiHelp.classList.remove("hidden");
-          el.multiHelp.innerHTML =
-            "Puedes elegir <strong>hasta " + MAX_MULTI + " opciones</strong>. " +
-            '<span style="color:#64748b;">Seleccionadas: ' + selectedCount + "/" + MAX_MULTI + "</span>";
-          el.multiContinue.classList.remove("hidden");
-          el.multiContinue.disabled = selectedCount === 0;
-        }
-
-        q.options.forEach((opt) => {
-          const btn = document.createElement("button");
-          btn.className = "option-btn";
-          btn.textContent = opt.label;
-          if (multi && Array.isArray(selected) && selected.includes(opt.value)) {
-            btn.classList.add("selected");
-          }
-          btn.addEventListener("click", () => handleOptionClick(opt.value));
-          el.options.appendChild(btn);
         });
+
+        return {
+          party: partyName,
+          score,
+          percentage: maxScore ? Math.round((score / maxScore) * 100) : 0,
+          matches: matchList
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return ranked;
+  };
+
+  const goNext = () => {
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion((x) => x + 1);
+    } else {
+      setStage("loading");
+      setTimeout(() => {
+        const r = calculateResults();
+        setResults(r);
+        setStage("results");
+      }, 900);
+    }
+  };
+
+  const handleSingleAnswer = (value) => {
+    const qid = questions[currentQuestion].id;
+    setAnswers((prev) => ({ ...prev, [qid]: value }));
+    goNext();
+  };
+
+  const toggleMultiAnswer = (value) => {
+    const qid = questions[currentQuestion].id;
+    const q = questions[currentQuestion];
+    const max = q.maxSelections || 2;
+
+    setAnswers((prev) => {
+      const existing = Array.isArray(prev[qid]) ? prev[qid] : [];
+      const has = existing.includes(value);
+
+      let next;
+      if (has) {
+        next = existing.filter((x) => x !== value);
+      } else {
+        if (existing.length >= max) return prev; // block
+        next = [...existing, value];
       }
+      return { ...prev, [qid]: next };
+    });
+  };
 
-      function toggleMultiSelect(qid, value) {
-        const current = Array.isArray(state.answers[qid]) ? state.answers[qid] : [];
-        const exists = current.includes(value);
-        if (exists) return current.filter((x) => x !== value);
-        if (current.length >= MAX_MULTI) return current;
-        return [...current, value];
-      }
+  const handleMultiContinue = () => {
+    const qid = questions[currentQuestion].id;
+    const selected = answers[qid] || [];
+    if (!selected || selected.length === 0) return; // require at least 1
+    goNext();
+  };
 
-      function handleOptionClick(value) {
-        const q = questions[state.currentQuestion];
-        const qid = q.id;
+  const handleDemographicSubmit = (data) => {
+    const clean = { ...data };
+    if (laborMap[clean.situacion_laboral]) {
+      clean.situacion_laboral_tag = laborMap[clean.situacion_laboral];
+    }
+    setAnswers((prev) => ({ ...prev, demografia: clean }));
+    goNext();
+  };
 
-        if (isMultiSelectQuestion(q)) {
-          const nextArr = toggleMultiSelect(qid, value);
-          state.answers[qid] = nextArr;
-          renderQuestion();
-          return;
-        }
+  const prepareShareAssets = async () => {
+    if (!results?.length) return;
+    setShareBusy(true);
+    try {
+      const top3 = results.slice(0, 3);
+      const blob = await buildShareImage({
+        title: "Mis resultados Aragón 2026",
+        subtitle: "Top 3 partidos por afinidad según mis prioridades (comparando programas oficiales).",
+        top3
+      });
+      if (!blob) return;
 
-        state.answers[qid] = value;
-        nextQuestion();
-      }
+      // revoke previous
+      if (shareImgUrl) URL.revokeObjectURL(shareImgUrl);
 
-      function nextQuestion() {
-        if (state.currentQuestion < questions.length - 1) {
-          state.currentQuestion += 1;
-          renderQuestion();
-        } else {
-          show("loading");
-          setTimeout(() => {
-            state.results = calculateResults(state.answers);
-            renderResults();
-            show("results");
-          }, 2000);
-        }
-      }
+      const url = URL.createObjectURL(blob);
+      setShareImgUrl(url);
+      return { blob, url };
+    } finally {
+      setShareBusy(false);
+    }
+  };
 
-      function renderResults() {
-        el.resultsList.innerHTML = "";
-        const medals = ["🥇", "🥈", "🥉"];
-        state.results.forEach((r, index) => {
-          const card = document.createElement("div");
-          card.className = "result-card";
+  const shareResults = async () => {
+    if (!results?.length) return;
 
-          const head = document.createElement("div");
-          head.className = "result-head";
-          head.innerHTML =
-            '<div class="badge">' + (medals[index] || "📊") + "</div>" +
-            '<div><div style="font-size:20px;font-weight:700;">' + r.party + "</div>" +
-            '<div class="muted">' + r.percentage + "% de afinidad</div></div>";
+    const top3 = results.slice(0, 3);
+    const text = `Mis resultados (Top 3):\n1) ${top3[0]?.party} — ${top3[0]?.percentage}%\n2) ${top3[1]?.party} — ${top3[1]?.percentage}%\n3) ${top3[2]?.party} — ${top3[2]?.percentage}%\n\nHecho con un comparador de programas oficiales (Aragón 2026).`;
 
-          card.appendChild(head);
+    // Try to build image and share file
+    let blob = null;
+    try {
+      const assets = await prepareShareAssets();
+      blob = assets?.blob || null;
+    } catch {
+      blob = null;
+    }
 
-          if (r.matches.length) {
-            const p = document.createElement("div");
-            p.className = "small";
-            p.style.marginBottom = "8px";
-            p.textContent = "Coincide contigo especialmente en:";
-            card.appendChild(p);
-
-            const ul = document.createElement("ul");
-            ul.className = "tag-list";
-            r.matches.slice(0, 3).forEach((m) => {
-              const li = document.createElement("li");
-              li.innerHTML = "<strong>" + m.category + ":</strong> " + m.match;
-              ul.appendChild(li);
-            });
-            card.appendChild(ul);
-          }
-
-          const footer = document.createElement("div");
-          footer.className = "result-footer";
-          const pdf = getPartyPdfUrl(r.party);
-          if (pdf) {
-            const a = document.createElement("a");
-            a.className = "link";
-            a.href = pdf;
-            a.target = "_blank";
-            a.rel = "noreferrer";
-            a.textContent = "Ver programa completo";
-            footer.appendChild(a);
-          } else {
-            const span = document.createElement("span");
-            span.className = "small";
-            span.textContent = "Programa no disponible";
-            footer.appendChild(span);
-          }
-          card.appendChild(footer);
-
-          el.resultsList.appendChild(card);
-        });
-      }
-
-      async function loadData() {
-        try {
-          if (window.__PROGRAM_DATA__) {
-            state.programJson = window.__PROGRAM_DATA__;
+    // Web Share API
+    if (navigator.share) {
+      try {
+        if (blob) {
+          const file = new File([blob], "resultados-aragon-2026.png", { type: "image/png" });
+          const can = navigator.canShare && navigator.canShare({ files: [file] });
+          if (can) {
+            await navigator.share({ title: "Resultados Aragón 2026", text, files: [file] });
             return;
           }
-          const res = await fetch(JSON_URL);
-          if (!res.ok) throw new Error("No se pudo cargar " + JSON_URL + " (" + res.status + ")");
-          state.programJson = await res.json();
-        } catch (e) {
-          state.programJson = { parties: [] };
-          console.warn(e.message);
         }
+        await navigator.share({ title: "Resultados Aragón 2026", text });
+        return;
+      } catch {
+        // fall through to clipboard
       }
+    }
 
-      el.startBtn.addEventListener("click", () => {
-        state.currentQuestion = 0;
-        state.answers = {};
-        show("quiz");
-        renderQuestion();
-      });
+    // Clipboard fallback
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("Resultados copiados al portapapeles ✅");
+    } catch {
+      alert("No se pudo compartir automáticamente. Copia el texto manualmente.");
+    }
+  };
 
-      el.restartBtn.addEventListener("click", () => {
-        state.currentQuestion = 0;
-        state.answers = {};
-        show("landing");
-      });
+  const downloadShareImage = async () => {
+    const assets = await prepareShareAssets();
+    if (!assets?.blob) return;
 
-      el.multiContinue.addEventListener("click", () => {
-        const q = questions[state.currentQuestion];
-        const selected = state.answers[q.id];
-        if (!Array.isArray(selected) || selected.length === 0) return;
-        nextQuestion();
-      });
+    const a = document.createElement("a");
+    a.href = assets.url;
+    a.download = "resultados-aragon-2026.png";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
-      loadData();
-    </script>
-  </body>
-</html>
+  // ---------------- UI ----------------
+
+  if (stage === "landing") {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+        <div className="container mx-auto px-4 py-16 max-w-4xl">
+          <div className="text-center mb-16">
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-6">
+              ¿Qué partido encaja mejor contigo en estas elecciones?
+            </h1>
+            <p className="text-xl text-slate-600 mb-8">
+              Responde 8 preguntas rápidas y descubre qué propuestas se alinean más con tus prioridades.
+            </p>
+
+            {jsonError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-6 text-sm">
+                Error cargando datos: {jsonError}
+                <div className="mt-2 text-red-600">
+                  Asegúrate de que el JSON está en <code>/public{JSON_URL}</code>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setStage("quiz")}
+              disabled={!programJson && !jsonError}
+              className="bg-slate-800 disabled:bg-slate-400 hover:bg-slate-700 text-white px-8 py-4 rounded-lg text-lg font-semibold inline-flex items-center gap-2 transition-colors"
+            >
+              Empezar cuestionario
+              <ChevronRight size={20} />
+            </button>
+
+            <p className="text-sm text-slate-500 mt-4">
+              Herramienta informativa basada en programas oficiales. Sin afiliación política.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-8 mb-12">
+            <h2 className="text-2xl font-bold text-slate-900 mb-8 text-center">¿Cómo funciona?</h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              <div className="text-center">
+                <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="text-slate-700" size={28} />
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-2">1. Responde 8 preguntas</h3>
+                <p className="text-slate-600 text-sm">Sobre vivienda, sanidad, economía y más</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <TrendingUp className="text-slate-700" size={28} />
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-2">2. Comparamos tus respuestas</h3>
+                <p className="text-slate-600 text-sm">Con programas electorales oficiales</p>
+              </div>
+              <div className="text-center">
+                <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FileText className="text-slate-700" size={28} />
+                </div>
+                <h3 className="font-semibold text-slate-900 mb-2">3. Ranking personalizado</h3>
+                <p className="text-slate-600 text-sm">Recibes % de afinidad y razones</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 rounded-xl p-8 text-white">
+            <div className="flex items-center gap-2 mb-6">
+              <Shield size={24} />
+              <h2 className="text-2xl font-bold">Garantías de neutralidad</h2>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {["Basado en programas oficiales", "Sin afiliación política", "No guardamos datos personales", "Metodología transparente"].map((t) => (
+                <div key={t} className="flex items-start gap-3">
+                  <Check size={20} className="mt-1 flex-shrink-0" />
+                  <span>{t}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === "quiz") {
+    const question = questions[currentQuestion];
+    const progress = ((currentQuestion + 1) / questions.length) * 100;
+
+    if (question.type === "demographic") {
+      return (
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8">
+          <div className="container mx-auto px-4 max-w-2xl">
+            <ProgressBar progress={progress} current={currentQuestion + 1} total={questions.length} />
+
+            <div className="bg-white rounded-xl shadow-lg p-8">
+              <h2 className="text-2xl font-bold text-slate-900 mb-2">{question.title}</h2>
+              <p className="text-slate-600 mb-6 text-sm">
+                Esta información no afecta al ranking, pero puede ayudar a contextualizar propuestas.
+              </p>
+
+              <DemographicForm fields={question.fields} onSubmit={handleDemographicSubmit} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const isMulti = question.type === "multi";
+    const selected = isMulti ? (Array.isArray(answers[question.id]) ? answers[question.id] : []) : [];
+
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-8">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <ProgressBar progress={progress} current={currentQuestion + 1} total={questions.length} />
+
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">{question.title}</h2>
+
+            {isMulti && (
+              <p className="text-sm text-slate-600 mb-6">
+                Selecciona hasta <strong>{question.maxSelections || 2}</strong> opciones. Debes elegir al menos 1 para continuar.
+              </p>
+            )}
+
+            <div className="space-y-3">
+              {question.options.map((option) => {
+                const active = isMulti ? selected.includes(option.value) : false;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => (isMulti ? toggleMultiAnswer(option.value) : handleSingleAnswer(option.value))}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      active
+                        ? "border-slate-800 bg-slate-50"
+                        : "border-slate-200 hover:border-slate-800 hover:bg-slate-50"
+                    }`}
+                    type="button"
+                  >
+                    <span className="text-slate-900 font-medium">{option.label}</span>
+                    {isMulti && active && (
+                      <span className="ml-2 text-xs text-slate-600">(seleccionado)</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {isMulti && (
+              <button
+                type="button"
+                onClick={handleMultiContinue}
+                disabled={!selected.length}
+                className="mt-6 w-full bg-slate-800 disabled:bg-slate-400 hover:bg-slate-700 text-white py-3 rounded-lg font-semibold transition-colors"
+              >
+                Continuar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === "loading") {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-xl text-slate-700">Analizando tu perfil y comparándolo con los programas electorales...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === "results") {
+    const medals = ["🥇", "🥈", "🥉"];
+    const top3 = (results || []).slice(0, 3);
+
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-12">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-bold text-slate-900 mb-3">Tus resultados</h1>
+            <p className="text-slate-600">Basados en la comparación con los programas electorales oficiales</p>
+          </div>
+
+          {/* Share actions */}
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Compartir resultados</h2>
+                <p className="text-sm text-slate-600">
+                  Compartiremos tu top 3 (texto) y, si tu móvil lo permite, también una imagen lista para RRSS.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={shareResults}
+                  disabled={shareBusy}
+                  className="inline-flex items-center gap-2 bg-slate-800 disabled:bg-slate-400 hover:bg-slate-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                >
+                  <Share2 size={18} />
+                  Compartir
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadShareImage}
+                  disabled={shareBusy}
+                  className="inline-flex items-center gap-2 border-2 border-slate-200 hover:border-slate-800 px-4 py-2 rounded-lg font-semibold text-slate-900 transition-colors"
+                >
+                  <Download size={18} />
+                  Descargar imagen
+                </button>
+              </div>
+            </div>
+
+            {shareImgUrl && (
+              <div className="mt-4">
+                <p className="text-sm text-slate-600 mb-2">Vista previa (PNG 1200×630):</p>
+                <img
+                  src={shareImgUrl}
+                  alt="Vista previa resultados"
+                  className="w-full rounded-lg border border-slate-200"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-6 mb-10">
+            {(results || []).map((result, index) => {
+              const pdfUrl = getPartyPdfUrl(result.party);
+              return (
+                <div key={result.party} className="bg-white rounded-xl shadow-lg p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{medals[index] || "📊"}</span>
+                      <div>
+                        <h3 className="text-2xl font-bold text-slate-900">{result.party}</h3>
+                        <p className="text-slate-600">{result.percentage}% de afinidad</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {result.matches.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-sm font-semibold text-slate-700 mb-2">Coincide contigo especialmente en:</p>
+                      <ul className="space-y-1">
+                        {result.matches.slice(0, 3).map((match, i) => (
+                          <li key={i} className="text-sm text-slate-600 flex items-start gap-2">
+                            <Check size={16} className="mt-0.5 text-slate-400 flex-shrink-0" />
+                            <span>
+                              <strong>{match.category}:</strong> {match.match}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {pdfUrl ? (
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-slate-800 hover:text-slate-600 text-sm font-medium inline-flex items-center gap-1"
+                    >
+                      <FileText size={16} />
+                      Ver programa completo
+                    </a>
+                  ) : (
+                    <div className="text-slate-500 text-sm inline-flex items-center gap-1">
+                      <FileText size={16} />
+                      Programa no disponible
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="bg-slate-100 rounded-lg p-6 text-center text-sm text-slate-600">
+            <p>
+              Esta herramienta compara tus respuestas con los programas oficiales. No sustituye el criterio personal ni recomienda el voto.
+            </p>
+          </div>
+
+          <div className="text-center mt-8">
+            <button
+              onClick={() => {
+                setStage("landing");
+                setCurrentQuestion(0);
+                setAnswers({});
+                setResults(null);
+                if (shareImgUrl) URL.revokeObjectURL(shareImgUrl);
+                setShareImgUrl(null);
+              }}
+              className="text-slate-600 hover:text-slate-900 font-medium"
+            >
+              Volver a empezar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+const ProgressBar = ({ progress, current, total }) => (
+  <div className="mb-8">
+    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+      <div className="h-full bg-slate-800 transition-all" style={{ width: `${progress}%` }} />
+    </div>
+    <p className="text-sm text-slate-600 mt-2 text-center">
+      Pregunta {current} de {total}
+    </p>
+  </div>
+);
+
+const DemographicForm = ({ fields, onSubmit }) => {
+  const [formData, setFormData] = useState({});
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  return (
+    <div className="space-y-6">
+      {fields.map((field) => (
+        <div key={field.name}>
+          <label className="block text-sm font-medium text-slate-700 mb-2">{field.label}</label>
+          <select
+            className="w-full p-3 border-2 border-slate-200 rounded-lg focus:border-slate-800 focus:outline-none"
+            value={formData[field.name] || ""}
+            onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+          >
+            {field.options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
+
+      <button
+        onClick={handleClick}
+        className="w-full bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-semibold transition-colors"
+      >
+        Continuar
+      </button>
+    </div>
+  );
+};
