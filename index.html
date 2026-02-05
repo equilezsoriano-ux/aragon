@@ -341,8 +341,8 @@
             No guardamos datos personales. Puedes dejarlo en blanco y continuar.
           </p>
 
+          <!-- ORDEN: Género, Provincia, Situación laboral, Edad -->
           <div class="grid2">
-            <!-- 1) Género -->
             <div class="field">
               <label for="demoGender">Género</label>
               <select id="demoGender">
@@ -354,7 +354,6 @@
               </select>
             </div>
 
-            <!-- 2) Provincia -->
             <div class="field">
               <label for="demoProvince">Provincia</label>
               <select id="demoProvince">
@@ -365,7 +364,6 @@
               </select>
             </div>
 
-            <!-- 3) Situación laboral -->
             <div class="field">
               <label for="demoEmployment">Situación laboral</label>
               <select id="demoEmployment">
@@ -379,7 +377,6 @@
               </select>
             </div>
 
-            <!-- 4) Edad -->
             <div class="field">
               <label for="demoAge">Edad</label>
               <select id="demoAge">
@@ -408,7 +405,7 @@
 
         <!-- Priority (después de demographics) -->
         <div id="priorityCard" class="card" style="margin-bottom:16px; display:none;">
-          <h2 style="margin:0 0 12px; font-size:18px;">Elige tu prioridad principal</h2>
+          <h2 style="margin:0 0 12px; font-size:18px;">Elige tu prioridad principal (pesará x2)</h2>
           <div id="priorityButtons" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
           <p style="font-size:12px; color:var(--muted); margin-top:10px;">Puedes dejarlo sin seleccionar.</p>
 
@@ -473,14 +470,12 @@
     </main>
 
     <script>
-      // NOTE: aquí mantengo tu DATA inline tal cual lo pegaste.
-      // Si en producción sirves el JSON externo, puedes reemplazarlo por un fetch.
-      const DATA = {"schema_version":"votecompass_aragon_2026_v1","scale":{"min":-2,"max":2,"labels":{"-2":"Totalmente en desacuerdo","-1":"En desacuerdo","0":"Neutral / No lo sé","1":"De acuerdo","2":"Totalmente de acuerdo"}},"statements":[{"id":"vivienda_alquiler_topes","text":"El Gobierno de Aragón debería limitar el precio del alquiler en zonas tensionadas.","topic":"vivienda","polarity":"pro-regulacion"},{"id":"vivienda_publica_parque","text":"Aragón debería aumentar de forma significativa el parque de vivienda pública en alquiler asequible.","topic":"vivienda","polarity":"pro-publico"},{"id":"vivienda_ayudas_compra","text":"Deberían priorizarse ayudas fiscales y subvenciones para comprar primera vivienda (frente a regular alquileres).","topic":"vivienda","polarity":"pro-compra"},{"id":"transportes_transporte_publico_tarifas","text":"Deberían abaratarse y ampliarse las tarifas/servicios de transporte público (urbano e interurbano).","topic":"transportes","polarity":"pro-publico"},{"id":"transportes_carreteras","text":"La prioridad en transportes debe ser invertir más en carreteras y autovías.","topic":"transportes","polarity":"pro-carretera"},{"id":"transportes_ferrocarril","text":"Aragón debería priorizar inversión en ferrocarril (cercanías, media distancia y conexiones).","topic":"transportes","polarity":"pro-ferrocarril"},{"id":"sanidad_financiacion_publica","text":"Aragón debería aumentar el gasto público sanitario aunque implique subir impuestos o déficit.","topic":"sanidad","polarity":"pro-publico"},{"id":"sanidad_privada_incentivos","text":"Deberían incentivarse fórmulas privadas o concertadas para reducir listas de espera.","topic":"sanidad","polarity":"pro-privado"},{"id":"sanidad_primaria_rural","text":"La atención primaria y la sanidad rural deben reforzarse con más profesionales y recursos.","topic":"sanidad","polarity":"pro-primaria"},{"id":"economia_bajada_impuestos","text":"Aragón debería bajar impuestos para familias y empresas como medida prioritaria.","topic":"economia","polarity":"pro-bajada"},{"id":"economia_pymes_industria","text":"Las ayudas y la política industrial deberían centrarse en pymes, reindustrialización y empleo local.","topic":"economia","polarity":"pro-pymes"},{"id":"economia_transicion_ecologica","text":"Aragón debe acelerar la transición energética y la descarbonización aunque encarezca costes a corto plazo.","topic":"economia","polarity":"pro-clima"},{"id":"educacion_publica_refuerzo","text":"Se debería reforzar la educación pública (infantil, primaria y secundaria) con más recursos y personal.","topic":"educacion","polarity":"pro-publica"},{"id":"educacion_libertad_concertada","text":"Debe ampliarse la libertad de elección (bonos/cheque escolar) y el peso de la concertada/privada.","topic":"educacion","polarity":"pro-concertada"},{"id":"sociales_dependencia","text":"Aragón debería aumentar la inversión en dependencia y cuidados de larga duración.","topic":"sociales","polarity":"pro-cuidados"},{"id":"sociales_igualdad_lgtbi","text":"Las políticas de igualdad y LGTBI deben reforzarse y transversalizarse en la acción de gobierno.","topic":"sociales","polarity":"pro-igualdad"},{"id":"otro_inmigracion_control","text":"La inmigración debería controlarse más estrictamente y condicionarse a la integración y al empleo.","topic":"otro","polarity":"pro-control"},{"id":"otro_seguridad_endurecer","text":"Deberían endurecerse las políticas de seguridad (más policía y sanciones).","topic":"otro","polarity":"pro-endurecer"},{"id":"otro_medioambiente_proteccion","text":"Aragón debería priorizar la protección ambiental (agua, biodiversidad) incluso si limita ciertos proyectos.","topic":"otro","polarity":"pro-ambiental"},{"id":"otro_aragon_autogobierno","text":"Debe reforzarse el autogobierno y la identidad aragonesa (competencias, lengua/cultura).","topic":"otro","polarity":"pro-autogobierno"}],"parties": (window.DATA_PARTIES_PLACEHOLDER || []) };
+      // ==========================
+      //  JSON externo (obligatorio)
+      //  Coloca el archivo en la misma carpeta que este HTML (o ajusta la ruta).
+      // ==========================
+      const JSON_URL = "./aragon_2026_votecompass_statements_UPDATED_LINKS.json";
 
-      // Si tu DATA inline incluye parties, elimina la línea anterior y pega tu JSON completo como ya hacías.
-    </script>
-
-    <script>
       // ============ CONFIG ============
       const SCALE = [
         { label: "Totalmente en desacuerdo", value: -2 },
@@ -573,9 +568,14 @@
         answers: {},
         priority: null,
         results: [],
-        data: DATA,
+        data: null,          // <-- se cargará desde JSON
         shareImgUrl: null,
-        demographics: { gender: "", province: "", employment: "", age: "" }
+        demographics: {
+          gender: "",
+          province: "",
+          employment: "",
+          age: ""
+        }
       };
 
       // ============ ELEMENTS ============
@@ -597,7 +597,7 @@
         // priority
         priorityButtons: document.getElementById("priorityButtons"),
 
-        // demographics (nuevo orden/campos)
+        // demographics (NUEVO)
         demoGender: document.getElementById("demoGender"),
         demoProvince: document.getElementById("demoProvince"),
         demoEmployment: document.getElementById("demoEmployment"),
@@ -620,8 +620,6 @@
         sharePreview: document.getElementById("sharePreview")
       };
 
-      const topics = ["vivienda","transportes","sanidad","economia","educacion","sociales","otro"];
-
       function partyStyle(p) {
         return {
           short: p?.meta?.short || partyStyleFallback[p.party]?.short || p.party.slice(0, 3).toUpperCase(),
@@ -637,18 +635,23 @@
         el.quiz.style.display     = stage === "quiz"     ? "block" : "none";
         el.results.style.display  = stage === "results"  ? "block" : "none";
 
-        // Dentro de preQuiz, alternamos tarjetas
-        if (stage === "demographics") {
-          el.priorityCard.style.display = "none";
-        }
-        if (stage === "priority") {
-          el.priorityCard.style.display = "block";
-        }
+        if (stage === "demographics") el.priorityCard.style.display = "none";
+        if (stage === "priority") el.priorityCard.style.display = "block";
       }
 
-      // ============ LANDING ============
+      // ============ TOPICS ============
+      function getTopicsFromData(data) {
+        const set = new Set((data?.statements || []).map(s => s.topic).filter(Boolean));
+        const topics = Array.from(set);
+        // fallback si algo viene raro
+        return topics.length ? topics : ["vivienda","transportes","sanidad","economia","educacion","sociales","otro"];
+      }
+
+      // ============ LANDING / PRIORITY ============
       function renderPriorityButtons() {
+        const topics = getTopicsFromData(state.data);
         el.priorityButtons.innerHTML = "";
+
         topics.forEach((t) => {
           const b = document.createElement("button");
           b.className = "btn-outline";
@@ -662,6 +665,7 @@
         });
       }
 
+      // ============ DEMOGRAPHICS ============
       function bindDemographics() {
         const sync = () => {
           state.demographics.gender = el.demoGender?.value || "";
@@ -903,9 +907,25 @@
         a.remove();
       }
 
+      // ============ DATA LOAD ============
+      async function loadData() {
+        try {
+          const res = await fetch(JSON_URL, { cache: "no-store" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const json = await res.json();
+          state.data = json;
+
+          // re-render priority buttons now that topics exist
+          renderPriorityButtons();
+        } catch (e) {
+          console.error("No se pudo cargar el JSON:", e);
+          alert("Error: no se pudo cargar el archivo JSON del cuestionario. Revisa la ruta JSON_URL.");
+        }
+      }
+
       // ============ EVENTS ============
       el.startBtn.addEventListener("click", () => {
-        show("demographics");
+        show("demographics");                 // 1) primero datos demográficos
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -915,7 +935,7 @@
       });
 
       el.toPriorityBtn.addEventListener("click", () => {
-        show("priority");
+        show("priority");                     // 2) después prioridad principal
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
@@ -925,6 +945,10 @@
       });
 
       el.toQuizBtn.addEventListener("click", () => {
+        if (!state.data?.statements?.length) {
+          alert("El cuestionario aún no está listo (JSON no cargado).");
+          return;
+        }
         show("quiz");
         window.scrollTo({ top: 0, behavior: "smooth" });
         renderQuestion();
@@ -949,12 +973,14 @@
       el.downloadBtn.addEventListener("click", downloadShareImage);
 
       // ============ INIT ============
-      renderPriorityButtons();
       bindDemographics();
       show("landing");
+      loadData(); // <-- carga JSON al arrancar
     </script>
   </body>
 </html>
+
+
 
 
 
